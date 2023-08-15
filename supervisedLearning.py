@@ -5,7 +5,22 @@ from torch.autograd import Variable
 from torch.nn import functional
 import random
 
-#offline ver
+# supervised learning agent
+
+# The model to be loaded to continue training. Leave this value empty or false to not load any file.
+LOAD_MODEL = "" #"in.pth"
+
+# The model to save to. Saves happen every 500 episodes. Leave empty or false for no saving.
+SAVE_MODEL = "" #"out.pth"
+
+# The file to write stats to. Leave empty or false for no saving.
+STATS_FILE = "" # output.txt
+
+# How many episodes to train for
+EPISODE_COUNT = 5000
+
+# Distribution to offline train on. "Human" for expert human games. Anything else is random distribution.
+DISTRIBUTION = ""
 
 class NN(nn.Module): #simple CNN
     def __init__(self):
@@ -59,7 +74,8 @@ class agent:
 
         self.lossFunc = nn.MSELoss()
 
-        #self.func.load_state_dict(torch.load("SL.pth"))
+        if LOAD_MODEL:
+            self.func.load_state_dict(torch.load(LOAD_MODEL))
         
         #self.opt = torch.optim.SGD(self.func.parameters(), lr = self.LR, momentum = self.PV)
         
@@ -78,11 +94,9 @@ class agent:
         return loss.item()
     
     def predict(self, brd, tkn):
-        # 8 x 8 x 3
-        # Similar to AlphaGoZero
+        # 8 x 8 x 2
         # 1 --> current player's tkns
         # 2 --> opponent's tkns
-        # 3 --> color of current player (can get rid of)?
         opp = 'x' if tkn == 'o' else 'o'
 
         #f = [[[1.0 if brd[i*8+j] == tkn else 0.0, 1.0 if brd[i*8+j] == opp else 0.0] for j in range(8)] for i in range(8)]
@@ -220,15 +234,17 @@ def fullTest(agt, iterations):
         
         if trial%5 == 0:
             print('$', end='', flush=True)
-    print()
-    outfile.write(f"Iterations: {iterations}\n")
-    outfile.write(f"Rounded Error: {roundedError/100}\n")
-    outfile.write(f"MSE Error: {squaredError/100}\n")
-    outfile.write(f"Random Goofs: {randomGoof/100}\n")
-    outfile.write(f"Selection Goofs: {selectionGoof/100}\n")
-    outfile.write(f"Avg Depth: {totalDepth/100}\n")
-    outfile.flush()
+    
+    if outfile:
+        outfile.write(f"Iterations: {iterations}\n")
+        outfile.write(f"Rounded Error: {roundedError/100}\n")
+        outfile.write(f"MSE Error: {squaredError/100}\n")
+        outfile.write(f"Random Goofs: {randomGoof/100}\n")
+        outfile.write(f"Selection Goofs: {selectionGoof/100}\n")
+        outfile.write(f"Avg Depth: {totalDepth/100}\n")
+        outfile.flush()
 
+    print()
     print(f"Iterations: {iterations}")
     print(f"Rounded Error: {roundedError/100}")
     print(f"MSE Error: {squaredError/100}")
@@ -267,34 +283,32 @@ def generateEpisodes(count):
             print('#', end='', flush=True)
     print()
     
-
 if __name__ == "__main__":
     global outfile
-    outfile = open("SL.txt", 'w')
+    if STATS_FILE:
+        outfile = open(STATS_FILE, 'w')
+    else:
+        outfile = False
 
     global avgd
     avgd = 0
     agt = agent()
     OD.setGlobals()
 
-    generateEpisodes(51000)
+    if DISTRIBUTION == "human":
+        import Wthor
+        global episodes
+        episodes = Wthor.generateEpisodes(EPISODE_COUNT + 100)
+    else:
+        generateEpisodes(EPISODE_COUNT + 100)
 
-    for i in range(50001):
+    for i in range(EPISODE_COUNT + 1):
         if i%500 == 0:
-            #print(f"Test {i}")
-            #test(agt)
-            #print("Average Depth", avgd/500)
-            avgd = 0
-            torch.save(agt.func.state_dict(), "SL.pth")
+            if SAVE_MODEL:
+                torch.save(agt.func.state_dict(), SAVE_MODEL)
         if i%1000 == 0:
             fullTest(agt, i)
         if i%10 == 0:
             print(f"*", end="", flush=True)
         simulateEpisode(agt, i)
         
-        
-
-
-
-
-

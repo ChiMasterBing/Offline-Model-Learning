@@ -1,5 +1,7 @@
 import othelloDriver as OD
 
+# .wtb file parser - reads the human games and processes them into agent friendly format
+
 def wtbToMove(i):
     if i == 0:
         return -1
@@ -42,6 +44,7 @@ def parseGame(bytes):
     return episode
 
 def generateEpisodes(cnt):
+    print("Parsing Wthor files...")
     episodes = []
     for year in range(2016, 1977, -1):
         with open(f"HumanGames/WTH_{year}.wtb", mode="rb") as f:

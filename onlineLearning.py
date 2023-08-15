@@ -5,6 +5,18 @@ from torch.autograd import Variable
 from torch.nn import functional
 import random
 
+# The model to be loaded to continue training. Leave this value empty or false to not load any file.
+LOAD_MODEL = "" #"in.pth"
+
+# The model to save to. Saves happen every 500 episodes. Leave empty or false for no saving.
+SAVE_MODEL = "" #"out.pth"
+
+# The file to write stats to. Leave empty or false for no saving.
+STATS_FILE = "" # output.txt
+
+# How many episodes to train for
+EPISODE_COUNT = 5000
+
 class NN(nn.Module): #simple CNN
     def __init__(self):
         super().__init__()
@@ -13,9 +25,6 @@ class NN(nn.Module): #simple CNN
         self.C2 = nn.Conv2d(64, 128, 3, padding=1)
         self.P1 = nn.MaxPool2d(2, 2)
 
-        #self.C3 = nn.Conv2d(128, 256, 3)
-
-        #padding?
         self.flatten = nn.Flatten(-3, -1)
         self.linear_relu_stack = nn.Sequential(
             nn.Linear(4*4*128, 256),
@@ -29,7 +38,6 @@ class NN(nn.Module): #simple CNN
     def forward(self, x):
         x = functional.relu(self.C1(x))
         x = functional.relu(self.C2(x))
-        #x = functional.relu(self.C3(x))
         x = self.P1(x)
 
         x = self.flatten(x)
@@ -61,10 +69,8 @@ class agent:
 
         self.rng64 = [i for i in range(64)]
 
-        self.func.load_state_dict(torch.load("1010Human.pth"))
-        
-        #self.opt = torch.optim.SGD(self.func.parameters(), lr = self.LR, momentum = self.PV)
-        
+        if LOAD_MODEL:
+            self.func.load_state_dict(torch.load("1010Human.pth"))
 
     def scoot(self, brd, tkn, g):
         g = Variable(torch.tensor(g), requires_grad = False).to(self.device)
@@ -83,8 +89,7 @@ class agent:
         self.lastBrd = brd #for caching purposes
         self.lastTkn = tkn
 
-        # 8 x 8 x 3
-        # Similar to AlphaGoZero
+        # 8 x 8 x 2
         # 1 --> current player's tkns
         # 2 --> opponent's tkns
         opp = 'x' if tkn == 'o' else 'o'
@@ -146,9 +151,6 @@ def train(f, g, agt):
     f = f.to(agt.device)
     g = g.to(agt.device)
 
-    # print(f.shape)
-    # print(g.shape)
-
     pred = agt.func(f)
 
     loss = agt.lossFunc(pred, g)
@@ -168,7 +170,6 @@ def test(agt):
         mvs = OD.getPossibleMovesDots(brd, tkn)
         
         if not mvs:
-            print(brd)
             break
                 
         picked, pred = agt.simulateMove(brd, tkn)
@@ -223,9 +224,6 @@ def fullTest(agt, iterations):
             if int(ans[mxInd]) != 1:
                 selectionGoof += 1
 
-            print(sum(pred))
-            print("\n\n")
-
             picked = random.choice([*mvs])
 
             brd = OD.playMove(brd, tkn, picked)
@@ -234,13 +232,14 @@ def fullTest(agt, iterations):
         if trial%5 == 0:
             print('$', end='', flush=True)
     print()
-    outfile.write(f"Iterations: {iterations}\n")
-    outfile.write(f"Rounded Error: {roundedError/100}\n")
-    outfile.write(f"MSE Error: {squaredError/100}\n")
-    outfile.write(f"Random Goofs: {randomGoof/100}\n")
-    outfile.write(f"Selection Goofs: {selectionGoof/100}\n")
-    outfile.write(f"Avg Depth: {totalDepth/100}\n")
-    outfile.flush()
+    if outfile:
+        outfile.write(f"Iterations: {iterations}\n")
+        outfile.write(f"Rounded Error: {roundedError/100}\n")
+        outfile.write(f"MSE Error: {squaredError/100}\n")
+        outfile.write(f"Random Goofs: {randomGoof/100}\n")
+        outfile.write(f"Selection Goofs: {selectionGoof/100}\n")
+        outfile.write(f"Avg Depth: {totalDepth/100}\n")
+        outfile.flush()
 
     print(f"Iterations: {iterations}")
     print(f"Rounded Error: {roundedError/100}")
@@ -294,31 +293,28 @@ def simulateEpisode(agt):
     g = Variable(torch.tensor(g), requires_grad = False)
 
     lss = train(f, g, agt)
-
-
+        
 if __name__ == "__main__":
-    outfile = open("1010Human.txt", 'w')
+    global outfile
+    if STATS_FILE:
+        outfile = open(STATS_FILE, 'w')
+    else:
+        outfile = False
 
     global avgd
     avgd = 0
     agt = agent()
     OD.setGlobals()
-    for i in range(40001):
-        if i%10 == 0:
-            print(f"*", end="", flush=True)
-        # if i%250 == 0:
-        #     print(f"Test {i}")
-        #     test(agt)
-        #     print("Average Depth", avgd/100)
-        #     avgd = 0
-            
+
+    for i in range(EPISODE_COUNT + 1):
+        if i%500 == 0:
+            if SAVE_MODEL:
+                torch.save(agt.func.state_dict(), SAVE_MODEL)
         if i%1000 == 0:
             fullTest(agt, i)
-            #if i != 0: torch.save(agt.func.state_dict(), "wthor.pth")
-
+        if i%10 == 0:
+            print(f"*", end="", flush=True)
         simulateEpisode(agt)
-        
-
 
 
 

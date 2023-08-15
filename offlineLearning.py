@@ -5,7 +5,22 @@ from torch.autograd import Variable
 from torch.nn import functional
 import random
 
-#offline ver
+# Offline learning agent
+
+# The model to be loaded to continue training. Leave this value empty or false to not load any file.
+LOAD_MODEL = "" #"in.pth"
+
+# The model to save to. Saves happen every 500 episodes. Leave empty or false for no saving.
+SAVE_MODEL = "" #"out.pth"
+
+# The file to write stats to. Leave empty or false for no saving.
+STATS_FILE = "" # output.txt
+
+# How many episodes to train for
+EPISODE_COUNT = 5000
+
+# Distribution to offline train on. "Human" for expert human games. Anything else is random distribution.
+DISTRIBUTION = ""
 
 class NN(nn.Module): #simple CNN
     def __init__(self):
@@ -14,10 +29,6 @@ class NN(nn.Module): #simple CNN
         self.C1 = nn.Conv2d(2, 64, 3, padding=1)
         self.C2 = nn.Conv2d(64, 128, 3, padding=1)
         self.P1 = nn.MaxPool2d(2, 2)
-
-        #self.C3 = nn.Conv2d(128, 256, 3)
-
-        #padding?
 
         self.flatten = nn.Flatten(-3, -1)
         self.linear_relu_stack = nn.Sequential(
@@ -59,10 +70,8 @@ class agent:
 
         self.lossFunc = nn.MSELoss()
 
-        #self.func.load_state_dict(torch.load("10kOfflineStats.pth"))
-        
-        #self.opt = torch.optim.SGD(self.func.parameters(), lr = self.LR, momentum = self.PV)
-        
+        if LOAD_MODEL:
+            self.func.load_state_dict(torch.load(LOAD_MODEL))        
 
     def scoot(self, brd, tkn, g):
         g = Variable(torch.tensor(g), requires_grad = False).to(self.device)
@@ -78,18 +87,13 @@ class agent:
         return loss.item()
     
     def predict(self, brd, tkn):
-        # 8 x 8 x 3
-        # Similar to AlphaGoZero
+        # 8 x 8 x 2
         # 1 --> current player's tkns
         # 2 --> opponent's tkns
-        # 3 --> color of current player (can get rid of)?
         opp = 'x' if tkn == 'o' else 'o'
-
-        #f = [[[1.0 if brd[i*8+j] == tkn else 0.0, 1.0 if brd[i*8+j] == opp else 0.0] for j in range(8)] for i in range(8)]
 
         l1 = [[1.0 if brd[i*8+j] == tkn else 0.0 for j in range(8)] for i in range(8)]
         l2 = [[1.0 if brd[i*8+j] == opp else 0.0 for j in range(8)] for i in range(8)]
-        #l3 = [[1.0 for _ in range(8)] for __ in range(8)]
 
         f = [l1, l2]
 
@@ -127,9 +131,6 @@ def train(f, g, agt):
     f = f.to(agt.device)
     g = g.to(agt.device)
 
-    # print(f.shape)
-    # print(g.shape)
-
     pred = agt.func(f)
 
     loss = agt.lossFunc(pred, g)
@@ -139,32 +140,6 @@ def train(f, g, agt):
     agt.opt.zero_grad()
 
     return loss.item()
-
-def test(agt):
-    brd = '.'*27 + "ox......xo" + '.'*27
-    tkn = 'x'
-
-    goofs = 0
-    while True:
-        mvs = OD.getPossibleMovesDots(brd, tkn)
-        
-        picked, pred = agt.simulateMove(brd, tkn)
-
-        if not mvs:
-            print(brd)
-            print(pred)
-            break
-                
-        
-        #print(picked)
-
-        if picked not in mvs:
-            goofs += 1
-        else:
-            brd = OD.playMove(brd, tkn, picked)
-            tkn = OD.opponent[tkn]
-
-    print("Goofs", goofs)
 
 def simulateEpisode(agt, epIndex):
     global avgd
@@ -176,7 +151,6 @@ def simulateEpisode(agt, epIndex):
     
 
     for info in episode:
-        #print(info)
         if type(info) == int: # A
             picked = info
 
@@ -190,8 +164,7 @@ def simulateEpisode(agt, epIndex):
                 if pos == picked:
                     pred[pos] = 1.0
                 else:
-                    1
-                    # pred[pos] -= (arr[pos]/sm) * diff
+                    pred[pos] -= (arr[pos]/sm) * diff
             
             batch.append((brd, tkn, pred))
         else: # S
@@ -259,15 +232,17 @@ def fullTest(agt, iterations):
         
         if trial%5 == 0:
             print('$', end='', flush=True)
-    print()
-    outfile.write(f"Iterations: {iterations}\n")
-    outfile.write(f"Rounded Error: {roundedError/100}\n")
-    outfile.write(f"MSE Error: {squaredError/100}\n")
-    outfile.write(f"Random Goofs: {randomGoof/100}\n")
-    outfile.write(f"Selection Goofs: {selectionGoof/100}\n")
-    outfile.write(f"Avg Depth: {totalDepth/100}\n")
-    outfile.flush()
+    
+    if outfile:
+        outfile.write(f"Iterations: {iterations}\n")
+        outfile.write(f"Rounded Error: {roundedError/100}\n")
+        outfile.write(f"MSE Error: {squaredError/100}\n")
+        outfile.write(f"Random Goofs: {randomGoof/100}\n")
+        outfile.write(f"Selection Goofs: {selectionGoof/100}\n")
+        outfile.write(f"Avg Depth: {totalDepth/100}\n")
+        outfile.flush()
 
+    print()
     print(f"Iterations: {iterations}")
     print(f"Rounded Error: {roundedError/100}")
     print(f"MSE Error: {squaredError/100}")
@@ -314,38 +289,30 @@ def generateEpisodes(count):
 
 if __name__ == "__main__":
     global outfile
-    outfile = open("1010Human.txt", 'w')
+    if STATS_FILE:
+        outfile = open(STATS_FILE, 'w')
+    else:
+        outfile = False
 
     global avgd
     avgd = 0
     agt = agent()
     OD.setGlobals()
 
-    distribution = "human"
-    if distribution == "human":
+    if DISTRIBUTION == "human":
         import Wthor
         global episodes
-        episodes = Wthor.generateEpisodes(3100)
+        episodes = Wthor.generateEpisodes(EPISODE_COUNT + 100)
     else:
-        generateEpisodes(11000)
+        generateEpisodes(EPISODE_COUNT + 100)
 
-    for i in range(10001):
+    for i in range(EPISODE_COUNT + 1):
         if i%500 == 0:
-            #print(f"Test {i}")
-            #test(agt)
-            #print("Average Depth", avgd/500)
-            avgd = 0
-            #if (i > 0):
-                #torch.save(agt.func.state_dict(), "1010Human.pth")
+            if SAVE_MODEL:
+                torch.save(agt.func.state_dict(), SAVE_MODEL)
         if i%1000 == 0:
             fullTest(agt, i)
         if i%10 == 0:
             print(f"*", end="", flush=True)
         simulateEpisode(agt, i)
         
-        
-
-
-
-
-
