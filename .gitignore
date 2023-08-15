@@ -1,0 +1,5 @@
+*.txt
+*.pth
+archive
+models
+__pycache__
